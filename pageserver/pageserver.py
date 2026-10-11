@@ -22,7 +22,9 @@ log = logging.getLogger(__name__)
 
 import socket    # Basic TCP/IP communication on the internet
 import _thread   # Response computation runs concurrently with main program
+import os
 
+DOCROOT = "./pages"
 
 def listen(portnum):
     """
@@ -91,6 +93,29 @@ def respond(sock):
 
     parts = request.split()
     if len(parts) > 1 and parts[0] == "GET":
+        path = parts[1]
+        filename = path[1:]
+        status = STATUS_NOT_FOUND
+        contents = "Not found.\n"
+
+        if (not path.startswith("/") or filename.startswith(("~", ".."))
+                or "//" in path or ".." in filename.split("/")):
+            status = STATUS_FORBIDDEN
+            contents = "Forbidden.\n"
+        elif filename.endswith((".html", ".css")):
+            try:
+                with open(os.path.join(DOCROOT, filename), "r") as page:
+                    contents = page.read()
+                status = STATUS_OK
+            except (FileNotFoundError, ValueError):
+                status = STATUS_NOT_FOUND
+                contents = "Not found.\n"
+        try:
+            transmit(status, sock)
+            transmit(contents, sock)
+        finally:
+            sock.close()
+        return
         transmit(STATUS_OK, sock)
         transmit(CAT, sock)
     else:
@@ -136,7 +161,9 @@ def get_options():
 
 
 def main():
+    global DOCROOT
     options = get_options()
+    DOCROOT = options.DOCROOT
     port = options.PORT
     if options.DEBUG:
         log.setLevel(logging.DEBUG)
